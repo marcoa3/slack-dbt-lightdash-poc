@@ -2,7 +2,7 @@ terraform {
   backend "s3" {
     encrypt        = true
     region         = "eu-west-2"
-    key            = "$PLEASE_CHANGE"
+    key            = "slack-dbt-lightdash-poc"
     dynamodb_table = "terraform-state-lock"
   }
 }

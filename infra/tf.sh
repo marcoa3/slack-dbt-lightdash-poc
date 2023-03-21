@@ -8,6 +8,7 @@ declare -A tf_commands=()
 tf_commands["init"]="init -backend-config=environments/$environment.backend"
 tf_commands["plan"]="plan -var-file=environments/$environment.tfvars"
 tf_commands["apply"]="apply -var-file=environments/$environment.tfvars"
+tf_commands["destroy"]="destroy -var-file=environments/$environment.tfvars"
 
 declare -A environment_account_ids=()
 environment_account_ids["preview"]="369662608964"
