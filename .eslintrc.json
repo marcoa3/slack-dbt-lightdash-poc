@@ -1,0 +1,6 @@
+{
+  "extends": "@beautypie/eslint-config/node",
+  "parserOptions": {
+    "project": "./tsconfig.json"
+  }
+}

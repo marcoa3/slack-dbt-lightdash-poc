@@ -1,0 +1,21 @@
+name: Template Sync
+
+on:
+  schedule:
+    - cron: "0 0 1 * *"
+  workflow_dispatch:
+
+jobs:
+  repo-sync:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: actions-template-sync
+        uses: AndreasAugustin/actions-template-sync@v0.6.0-draft
+        with:
+          source_repo_ssh_private_key: ${{ secrets.BEAUTYPIE_ROBOT_SSH_KEY }}
+          source_repo_path: beautypie/template-typescript
+          github_token: ${{ secrets.GITHUB_TOKEN }}
