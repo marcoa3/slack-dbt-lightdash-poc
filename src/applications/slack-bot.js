@@ -7,14 +7,61 @@ const app = new App({
   signingSecret: process.env.SLACK_SIGNING_SECRET,
 });
 
-// Create a Snowflake connection object
-const connection = snowflake.createConnection({
-  account: process.env.SNOWFLAKE_ACCOUNT,
-  role: process.env.SNOWFLAKE_ROLE,
-  password: process.env.SNOWFLAKE_PASSWORD,
-  username: process.env.SNOWFLAKE_USER,
-  warehouse: process.env.SNOWFLAKE_WAREHOUSE,
-});
+const connectionPool = snowflake.createPool(
+  // connection options
+  {
+    account: process.env.SNOWFLAKE_ACCOUNT,
+    role: process.env.SNOWFLAKE_ROLE,
+    password: process.env.SNOWFLAKE_PASSWORD,
+    username: process.env.SNOWFLAKE_USER,
+    warehouse: process.env.SNOWFLAKE_WAREHOUSE,
+  },
+  // pool options
+  {
+    max: 10, // specifies the maximum number of connections in the pool
+    min: 1, // specifies the minimum number of connections in the pool
+  }
+);
+
+function metric_to_lightdash(metric_json) {
+    console.log(metric_json)
+  const table_name = metric_json.table_name
+  const BASE_URL = `https://beautypie.lightdash.cloud/projects/e9292f3b-639d-49b8-80cd-5fb3ab3bec32/tables/${table_name}?`;
+  const dimensions = metric_json.dimensions.map((d) => `${table_name}_${d}`);
+  const metrics = [`${table_name}_${metric_json.name}`];
+  const url_params = {
+    tableName: table_name,
+    metricQuery: {
+      dimensions,
+      metrics,
+      sorts: [],
+      limit: 500,
+      tableCalculations: [],
+      filters: {},
+      additionalMetrics: []
+    },
+    tableConfig: { columnOrder: [...dimensions, ...metrics] },
+    chartConfig: {
+      type: 'cartesian',
+      config: {
+        layout: {
+          xField: dimensions[0],
+          yField: metrics
+        },
+        eChartsConfig: {
+          series: [{
+            encode: {
+              xRef: { field: dimensions[0] },
+              yRef: { field: metrics[0] }
+            },
+            type: 'bar'
+          }]
+        }
+      }
+    }
+  };
+  return `${BASE_URL}create_saved_chart_version=${JSON.stringify(url_params).replace(/\s/g, '')}`;
+}
 
 // All the room in the world for your code
 
@@ -52,44 +99,44 @@ app.event("reaction_added", async ({ event, client, context }) => {
       const text = `$$${message.messages[0].text}$$`;
       // Execute the query and store the results in a variable
       var response;
-      await connection.connect(function (err, conn) {
-        if (err) {
-          console.error("Unable to connect: " + err.message);
-        } else {
-          console.log("Successfully connected to Snowflake.");
+      await connectionPool.use(async (clientConnection) => {
+        console.log("Successfully connected to Snowflake.");
 
-          const query = `SELECT ANALYTICS_STAGING.DBT_NATURAL_LANGUAGE.metric_sql_to_metric_object(
-        ANALYTICS_STAGING.DBT_NATURAL_LANGUAGE.TEXT_TO_SQL(
-          ${text},
-           ANALYTICS_STAGING.DBT_NATURAL_LANGUAGE.dbt_metrics()
-        )
-      );`;
-          console.log(query);
+        const query = `SELECT ANALYTICS_STAGING.DBT_NATURAL_LANGUAGE.metric_sql_to_metric_object(
+  ANALYTICS_STAGING.DBT_NATURAL_LANGUAGE.TEXT_TO_SQL(
+    ${text},
+     ANALYTICS_STAGING.DBT_NATURAL_LANGUAGE.dbt_metrics()
+  ),
+  ANALYTICS_STAGING.DBT_NATURAL_LANGUAGE.dbt_metrics()
+);`;
+        console.log(query);
 
-          connection.execute({
-            sqlText: query,
-            complete: function (err, stmt, rows) {
-              if (err) {
-                console.error("Unable to execute query: " + err.message);
-              } else {
-                console.log("Query executed successfully.");
-                response = rows;
-                console.log(rows);
-                client.chat.postMessage({
-                  channel: event.item.channel,
-                  text: response[0][Object.keys(response[0])],
-                });
-              }
-              connection.destroy(function (err, conn) {
-                if (err) {
-                  console.error("Unable to disconnect: " + err.message);
-                } else {
-                  console.log("Disconnected from Snowflake.");
-                }
+        clientConnection.execute({
+          sqlText: query,
+          complete: function (err, stmt, rows) {
+            if (err) {
+              console.error("Unable to execute query: " + err.message);
+            } else {
+              console.log("Query executed successfully.");
+              response = rows;
+              const ldUrl = metric_to_lightdash(response[0][Object.keys(response[0])])
+              console.log(rows);
+              console.log(response[0][Object.keys(response[0])])
+              console.log(ldUrl)
+              client.chat.postMessage({
+                channel: event.item.channel,
+                text: ldUrl,
               });
-            },
-          });
-        }
+            }
+            // connection.destroy(function (err, conn) {
+            //   if (err) {
+            //     console.error("Unable to disconnect: " + err.message);
+            //   } else {
+            //     console.log("Disconnected from Snowflake.");
+            //   }
+            // });
+          },
+        });
       });
     }
   } catch (error) {
